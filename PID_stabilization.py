@@ -9,7 +9,7 @@ from simple_pid import PID;
 #   B                               A
 #
 #                                           Front of Robot
-#
+#               Top of Robot
 #
 #   D                               C
 #  -----------------------------------
@@ -64,6 +64,7 @@ class RotController:
     pitchPID = PID(yValues, yGoal, 0.01, (-1,1), True, False)
     yawPID = PID(zValues, zGoal, 0.01, (-1,1), True, False)
         
+    
     #LOOP FUNCTIONS (THEY ARE TO BE USED IN A LOOP FOR THE PID STUFF)
 
         #outputs the pid outputs for the given inputs
@@ -95,11 +96,42 @@ class RotController:
     def setInputs(inputX, inputY, inputZ):
         input = (inputX, inputY, inputZ)
 
+        #allows for inputs to be put in, and a list thing with the motor powers to be output out
     def fullPID(roll, pitch, yaw):
-
         setInputs(roll, pitch, yaw)
         setAxisMotorPowers(getmotorPowers(input))
         return(getMotorPowers())
+
+    #NON LOOP FUNCTIONS (just to get random values from the object)
+
+        #outputs pid settings for roll
+    def getRollPID():
+        return rollPID.tunings()
+
+        #outputs pid settings for pitch
+    def getPitchPID():
+        return pitchPID.tunings
+
+        #outputs pid settings for yaw
+    def getYawPID():
+        return yawPID.tunings()
+
+        #sets pid settings for roll
+    def setRollPID(tunings):
+        xValues = tunings
+        rollPID.tunings(xValues)
+
+        #sets pid settings for pitch
+    def setPitchPID(tunings):
+        yValues = tunings
+        PitchPID.tunings(yValues)
+
+        #sets pid settings for yaw
+    def setYawPID(tunings):
+        zValues = tunings
+        yawPID.tunings(zValues)
+
+
 
 
         
