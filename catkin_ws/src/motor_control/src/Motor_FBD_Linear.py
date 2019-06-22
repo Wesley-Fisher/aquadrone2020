@@ -15,28 +15,32 @@ xLength = 36
 yLength = 12
 
 #all of these are normalized to produce a net force of 1 pound
-relativeXThrusts = np.array([0, 0, 1, 1, 0, 0]) / 2
+relativeXThrusts = np.array([0, 0, 1, 1, 0, 0]) / 2.0
 relativeYThrusts = np.array([0, 0, 0, 0, 0, 0]) #not possible
-relativeZThrusts = np.array([-1, -1, 0, 0, -1, -1]) / 4
+relativeZThrusts = np.array([-1, -1, 0, 0, -1, -1]) / 4.0
 
 #all of these are normalized to produce a net torque of 1 pound-inch
-relativeRollThrusts = np.array([-1, 1, 0, 0, -1, 1]) / (yLength * 2)
-relativePitchThrusts = np.array([1, 1, 0, 0, -1, -1]) / (xLength * 2)
-relativeYawThrusts = np.array([0, 0, -1, 1, 0, 0]) / yLength
+relativeRollThrusts = np.array([-1, 1, 0, 0, -1, 1]) / (yLength * 2.0)
+relativePitchThrusts = np.array([1, 1, 0, 0, -1, -1]) / (xLength * 2.0)
+relativeYawThrusts = np.array([0, 0, -1, 1, 0, 0]) / float(yLength)
 
 thrustMatrix = np.column_stack((relativeXThrusts, relativeYThrusts, relativeZThrusts, 
 			relativeRollThrusts, relativePitchThrusts, relativeYawThrusts))
 
-rospy.init_node("movement_controller")
-rospy.Subscriber("movement_command", Wrench, processThrusts)
-publisher = rospy.Publisher("motor_command", MotorControls, queue_size=0)
 
 #all inputs in pounds or pound-inches respectively
 #note that with this design, the yThrust is ignored as it is not possible
 def processThrusts(wrench):
-	thrusts = np.array([wrench.force.x, wrench.force.y, wrench.force.z, 
+	print(wrench)
+	print(thrustMatrix)
+	vector = np.array([wrench.force.x, wrench.force.y, wrench.force.z, 
 		wrench.torque.x, wrench.torque.y, wrench.torque.z])
 
 	command = MotorControls()
 	command.motorThrusts = thrustMatrix.dot(vector)
 	publisher.publish(command)
+
+rospy.init_node("movement_controller")
+sub = rospy.Subscriber("movement_command", Wrench, processThrusts)
+publisher = rospy.Publisher("motor_command", MotorControls, queue_size=0)
+rospy.spin()

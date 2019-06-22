@@ -3,6 +3,7 @@ import numpy as np
 import rospy
 from geometry_msgs.msg import Wrench
 
+print("Starting")
 #wait for motors to set up
 rospy.sleep(7)
 
@@ -13,8 +14,11 @@ while True:
 	x = 0
 	z = 0
 	yaw = 0
+
+	if rospy.is_shutdown():
+		exit()
 	
-	control = input("Command:")
+	control = raw_input("Command:")
 	if control == "w":
 		x = 1
 	elif control == "s":
@@ -25,7 +29,7 @@ while True:
 		yaw = -1
 	elif control == "i":
 		z = 1
-	elif contorl == "k":
+	elif control == "k":
 		z = -1
 	
 	command = Wrench()
