@@ -1,4 +1,8 @@
+#!/usr/bin/env python
 import numpy as np
+import rospy
+from geometry_msgs.msg import Wrench
+from aquadrone_msgs.msg import MotorControls
 
 #assumptions:
 #	see diagrams for coordinate system and motor numbering
@@ -23,8 +27,16 @@ relativeYawThrusts = np.array([0, 0, -1, 1, 0, 0]) / yLength
 thrustMatrix = np.column_stack((relativeXThrusts, relativeYThrusts, relativeZThrusts, 
 			relativeRollThrusts, relativePitchThrusts, relativeYawThrusts))
 
-#input is [xThrust, yThrust, zThrust, rollTorque, pitchTorque, yawTorque]
+rospy.init_node("movement_controller")
+rospy.Subscriber("movement_command", Wrench, processThrusts)
+publisher = rospy.Publisher("motor_command", MotorControls, queue_size=0)
+
 #all inputs in pounds or pound-inches respectively
 #note that with this design, the yThrust is ignored as it is not possible
-def convertThrusts(vector):
-	return thrustMatrix.dot(vector)
+def processThrusts(wrench):
+	thrusts = np.array([wrench.force.x, wrench.force.y, wrench.force.z, 
+		wrench.torque.x, wrench.torque.y, wrench.torque.z])
+
+	command = MotorControls()
+	command.motorThrusts = thrustMatrix.dot(vector)
+	publisher.publish(command)

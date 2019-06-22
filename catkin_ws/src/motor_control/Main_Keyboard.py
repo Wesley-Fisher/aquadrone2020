@@ -1,12 +1,13 @@
+#!/usr/bin/env python
 import numpy as np
-import time
-import keyboard
-import Motor_FBD_Linear as fbd
-import Motor_PWM_Converter as pwmConverter
-import Motor_Controller as controller
+import rospy
+from geometry_msgs.msg import Wrench
 
 #wait for motors to set up
-time.sleep(7)
+rospy.sleep(7)
+
+rospy.init_node("main")
+publisher = rospy.Publisher("movement_command", Wrench, queue_size=0)
 
 while True:
 	x = 0
@@ -27,10 +28,8 @@ while True:
 	elif contorl == "k":
 		z = -1
 	
-	thrust = np.array([x, 0, z, 0, 0, yaw])
-	thrust = fbd.convertThrusts(thrust)
-	for i in range(0, 6):
-		thrust[i] = pwmConverter.getPWMSignalWidth(thrust[i])
-	controller.applyThrusts(thrust)
-	print("x: " + str(x) + ", z:" + str(z) + ", yaw:" + str(yaw))
-	time.sleep(0.05)
+	command = Wrench()
+	command.force.x = x
+	command.force.z = z
+	command.torque.z = yaw 
+	publisher.publish(command)
