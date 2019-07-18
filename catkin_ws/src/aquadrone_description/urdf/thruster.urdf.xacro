@@ -35,6 +35,17 @@
       <child link="thruster_${thruster_id}" />
     </joint>
 
+    <transmission name="thruster_${thruster_id}_transmission" type="SimpleTransmission">
+      <type>transmission_interface/SimpleTransmission</type>
+      <joint name="thruster_${thruster_id}_joint">
+        <hardwareInterface>EffortJointInterface</hardwareInterface>
+      </joint>
+      <actuator name="thruster_${thruster_id}_joint_motor">
+        <hardwareInterface>EffortJointInterface</hardwareInterface>
+        <mechanicalReduction>1</mechanicalReduction>
+      </actuator>
+    </transmission>
+
     <gazebo>
       <!-- Thruster ROS plugin -->
       <plugin name="${thruster_id}_thruster_model" filename="libuuv_thruster_ros_plugin.so">

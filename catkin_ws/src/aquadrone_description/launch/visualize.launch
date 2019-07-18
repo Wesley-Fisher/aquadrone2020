@@ -1,0 +1,5 @@
+<launch>
+    <arg name="viz_type" default="local"/>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find aquadrone_description)/config/viz_$(arg viz_type).rviz" />
+    <node name="m2tf" pkg="message_to_tf" type="message_to_tf" args="/aquadrone/internal/sim_only/global_pos"/>
+</launch>
