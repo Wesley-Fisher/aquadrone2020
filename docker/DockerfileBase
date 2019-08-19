@@ -2,10 +2,9 @@ FROM ros:kinetic-robot-xenial
 
 # Install basic useful programs
 # Some are just for testing that the docker image was built correctly
-RUN apt-get update ; exit 0
-RUN apt-get install apt-transport-https
 RUN apt-get update && \
     apt-get install -y \
+      apt-transport-https \
       curl \
       build-essential \
       cmake \
