@@ -13,7 +13,6 @@ from autograd import grad, jacobian, elementwise_grad
 from geometry_msgs.msg import Point, Vector3, Quaternion
 from sensor_msgs.msg import Imu, FluidPressure
 
-from thruster_control.configurations.v28_configuration import V28Configuration
 from aquadrone_msgs.msg import SubState, MotorControls
 
 import matplotlib.pyplot as plt
@@ -81,7 +80,7 @@ class LandmarkSensor(object):
 
 
     def get_timeout_sec(self):
-        return 0.1
+        return 0.25
 
     def get_p(self):
         return 2
@@ -155,7 +154,7 @@ class EKF:
 
         self.dt = dt
 
-        self.n = 16 # Number of state elements
+        self.n = 6 + 2*len(landmarks) # Number of state elements
         self.m = 1 # Number of inputs
 
         self.x = np.zeros((self.n, 1))
@@ -170,7 +169,11 @@ class EKF:
         self.P[IDx.Mx][IDx.Mx] = 20
         self.P[IDx.My][IDx.My] = 20
         self.P[IDx.Mth][IDx.Mth] = 20
+        
         self.Q = np.eye(self.n) * 0.00001 # Uncertanty in dynamics model
+        self.Q[IDx.Mx][IDx.Mx] = 0.2
+        self.Q[IDx.My][IDx.My] = 0.2
+        self.Q[IDx.Mth][IDx.Mth] = 0.2
 
         
         # Potential Future Sensors:
@@ -275,37 +278,80 @@ class EKF:
         # Calculate next state from current state x and inputs u
         # Must be autograd-able
 
-        robot_state = np.array([x[IDx.Rx],
-                                x[IDx.Ry],
-                                x[IDx.Rth]])
 
-        Mx = x[IDx.Mx]
-        My = x[IDx.My]
+        def new_shifted(x):
+            robot_state = np.array([x[IDx.Rx],
+                                    x[IDx.Ry],
+                                    x[IDx.Rth]])
 
-        scalar = math.exp(-0.1*self.dt)
+            Mx = x[IDx.Mx]
+            My = x[IDx.My]
 
-        Mx_new = 0.9*x[IDx.Mx]
-        My_new = 0.9*x[IDx.My]
-        
-        map_state = np.array([ Mx_new,
-                               My_new,
-                               x[IDx.Mth] ])
+            scalar = math.exp(-0.1*self.dt)
 
-        newx = np.vstack([robot_state, map_state])
-        #print(newx)
+            Mx_new = 0.9*x[IDx.Mx]
+            My_new = 0.9*x[IDx.My]
+            
+            map_state = np.array([ Mx_new,
+                                My_new,
+                                x[IDx.Mth] ])
 
-        for L in self.landmarks:
-            x0 = x[L.ix]
-            y0 = x[L.iy]
+            newx = np.vstack([robot_state, map_state])
+            #print(newx)
 
-            dx = x0 + Mx - Mx_new
-            dy = y0 + My - My_new
+            for L in self.landmarks:
+                x0 = x[L.ix]
+                y0 = x[L.iy]
 
-            state = np.array([ dx, dy])
+                dx = x0 + Mx - Mx_new
+                dy = y0 + My - My_new
 
-            newx = np.vstack([newx, state])
+                state = np.array([ dx, dy])
 
-        return newx
+                newx = np.vstack([newx, state])
+            return newx
+
+        def new_rotated(x):
+            robot_state = np.array([x[IDx.Rx],
+                                    x[IDx.Ry],
+                                    x[IDx.Rth]])
+
+            Mx = x[IDx.Mx]
+            My = x[IDx.My]
+            Mth = x[IDx.Mth]
+
+            scalar = math.exp(-0.1*self.dt)
+
+            Mth_new = 0.9*x[IDx.Mth]
+            
+            map_state = np.array([ Mx,
+                                   My,
+                                   Mth_new ])
+
+            newx = np.vstack([robot_state, map_state])
+            #print(newx)
+
+            for L in self.landmarks:
+                x0 = x[L.ix]
+                y0 = x[L.iy]
+
+                x_old = x[IDx.Mx] + np.cos(Mth)*x[L.ix] - np.sin(Mth)*x[L.iy]
+                y_old = x[IDx.My] + np.sin(Mth)*x[L.ix] + np.cos(Mth)*x[L.iy]
+
+                x_new = x[IDx.Mx] + np.cos(Mth_new)*x[L.ix] - np.sin(Mth_new)*x[L.iy]
+                y_nee = x[IDx.My] + np.sin(Mth_new)*x[L.ix] + np.cos(Mth_new)*x[L.iy]
+
+
+                state = np.array([ x0, y0])
+
+                newx = np.vstack([newx, state])
+            return newx
+
+
+        x1 = new_shifted(x)
+        x2 = new_rotated(x1)
+
+        return x2
 
 
 
@@ -319,10 +365,27 @@ class EKF:
             
             
 
+identity_world = [[1, 0, 1, 0],
+                  [0, 1, 0, 0],
+                  [-1, 0, -1, 0],
+                  [0, -1, 0, -1],
+                  [1, 1, 1, 1]
+]
+
+shifted_world = [ [1, 0, 11, 0],
+                  [0, 1, 10, 0],
+                  [-1, 0, 9, 0],
+                  [0, -1, 10, -1],
+                  [1, 1, 11, 1]
+                  ]
+
+rotated_world = [  [1, 0, 0, 1],
+                   [0, 1, -1, 0],
+                   [-1, 0, 0, -1],
+                   [0, -1, 1, 0],
+                   [1, 1, -1, 1]  ]
+
 if __name__ == "__main__":
-    
-    
-    
     dt = 0.01
     
     passes = 2
@@ -340,16 +403,23 @@ if __name__ == "__main__":
         L_nomap = LandmarkSensor(i,  x0,  y0,  xm,  ym, False)
         return L, L_nomap
 
-    L1, L1_nomap = make_landmark_pair(0,  1,  0,  1+dx, 0+dy)
-    L2, L2_nomap = make_landmark_pair(1,  0,  1,  0+dx,  1+dy)
-    L3, L3_nomap = make_landmark_pair(2, -1,  0, -1+dx,  0+dy)
-    L4, L4_nomap = make_landmark_pair(3,  0, -1,  0+dx, -1+dy)
-    L5, L5_nomap = make_landmark_pair(4,  1,  1,  1+dx,  1+dy)
+    world = rotated_world
 
-    landmarks = [L1, L2, L3, L4, L5]
+    landmarks = []
+    landmarks_nomap = []
+    i = 0
+    for coords in world:
+        L, L_nomap = make_landmark_pair(i, coords[0], coords[1], coords[2], coords[3])
+        i = i + 1
+        landmarks.append(L)
+        landmarks_nomap.append(L_nomap)
 
-    landmarks_nomap = [L1_nomap, L2_nomap, L3_nomap, L4_nomap, L5_nomap]
 
+    #landmarks = [L1, L2, L3, L4, L5]
+
+    #landmarks_nomap = [L1_nomap, L2_nomap, L3_nomap, L4_nomap, L5_nomap]
+
+    print(landmarks)
 
     ekf = EKF(landmarks, dt)
     ekf_nomap = EKF(landmarks_nomap, dt)
@@ -358,10 +428,13 @@ if __name__ == "__main__":
         ekf.x[L.ix] = L.xm0
         ekf.x[L.iy] = L.ym0
 
+    for L in landmarks_nomap:
         ekf_nomap.x[L.ix] = L.xm0
         ekf_nomap.x[L.iy] = L.ym0
 
-    plot_sizes = [4, 9, 16, 25, 36]
+
+    plot_sizes = [(i+3)**2 for i in range(0, len(landmarks))]
+    #plot_sizes = [4, 9, 16, 25, 36]
     
     for i in range(0, passes):
         t0 = time.time()
@@ -376,25 +449,24 @@ if __name__ == "__main__":
             rx = radius*np.cos(phase)
             ry = radius*np.sin(phase)
 
+
+            def updates(i, rx, ry):
+                landmarks[i].set_measurement(rx, ry, 0.05)
+                landmarks_nomap[i].set_measurement(rx, ry, 0.05)
+
             
             if dT < T/4.0:
-                L1.set_measurement(rx, ry, 0.05)
-                L1_nomap.set_measurement(rx, ry, 0.5)
-                L2.set_measurement(rx, ry, 0.05)
-                L2_nomap.set_measurement(rx, ry, 0.5)
+                updates(0, rx, ry)
+                updates(1, rx, ry)
+                updates(2, rx, ry)
             elif dT < 2*T/4.0:
-                L2.set_measurement(rx, ry, 0.05)
-                L2_nomap.set_measurement(rx, ry, 0.5)
-                L3.set_measurement(rx, ry, 0.05)
-                L3_nomap.set_measurement(rx, ry, 0.5)
+                updates(1, rx, ry)
+                updates(2, rx, ry)
             elif dT < 3*T/4.0:
-                L3.set_measurement(rx, ry, 0.05)
-                L3_nomap.set_measurement(rx, ry, 0.5)
-                L4.set_measurement(rx, ry, 0.05)
-                L4_nomap.set_measurement(rx, ry, 0.05)
+                updates(2, rx, ry)
+                updates(3, rx, ry)
             elif dT < 4*T/4.0:
-                L4.set_measurement(rx, ry, 0.05)
-                L4_nomap.set_measurement(rx, ry, 0.05)
+                updates(3, rx, ry)
             
             ekf.prediction()
             ekf.update()
@@ -402,11 +474,11 @@ if __name__ == "__main__":
             ekf_nomap.prediction()
             ekf_nomap.update()
 
-            def plot_col(idx, landmarks, ekf):
+            def plot_col(idx, the_landmarks, ekf):
 
                 plt.subplot(2,3,1+3*idx)
-                x = [float(L.x0) for L in landmarks]
-                y = [float(L.y0) for L in landmarks]
+                x = [float(L.x0) for L in the_landmarks]
+                y = [float(L.y0) for L in the_landmarks]
                 plt.scatter(x, y, plot_sizes, c='b')
                 plt.scatter([rx], [ry], c='r')
                 plt.title("Ground Truth")
@@ -415,8 +487,8 @@ if __name__ == "__main__":
 
                 plt.subplot(2,3,2+3*idx)
                 plt.cla()
-                x = [float(ekf.x[L.ix]) for L in landmarks]
-                y = [float(ekf.x[L.iy]) for L in landmarks]
+                x = [float(ekf.x[L.ix]) for L in the_landmarks]
+                y = [float(ekf.x[L.iy]) for L in the_landmarks]
                 plt.scatter(x, y, plot_sizes, c='b')
                 plt.scatter(ekf.x[IDx.Rx], ekf.x[IDx.Ry], c='r')
                 plt.title("Map Local from x")
@@ -424,8 +496,8 @@ if __name__ == "__main__":
 
                 plt.subplot(2,3,3+3*idx)
                 plt.cla()
-                loc_x = [float(ekf.x[L.ix]) for L in landmarks]
-                loc_y = [float(ekf.x[L.iy]) for L in landmarks]
+                loc_x = [float(ekf.x[L.ix]) for L in the_landmarks]
+                loc_y = [float(ekf.x[L.iy]) for L in the_landmarks]
 
                 th = ekf.x[IDx.Mth]
                 wx = []
@@ -449,15 +521,19 @@ if __name__ == "__main__":
             time.sleep(dt)
 
 
-    L1.set_measurement(0, 0, 0)
-    print(L1.z_dx)
-    print(L1.z_dy)
+    landmarks[0].set_measurement(0, 0, 0)
+    print(landmarks[0].z_dx)
+    print(landmarks[0].z_dy)
+
+    landmarks_nomap[0].set_measurement(0, 0, 0)
+    print(landmarks_nomap[0].z_dx)
+    print(landmarks_nomap[0].z_dy)
+
+    print(landmarks_nomap[0].state_to_measurement_h(ekf_nomap.x, 0))
 
     a = ekf.x
-    print(a.shape)
     b = np.diag(ekf.P)
     b = b.reshape(b.shape[0],1)
-    print(b.shape)
     c = np.hstack([a, b])
     print(c)
         
